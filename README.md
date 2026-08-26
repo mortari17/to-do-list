@@ -1,103 +1,116 @@
-ToDoList — Android (Kotlin + Jetpack Compose)
-📌 Descrição do projeto
+# ToDoList — Android (Kotlin + Jetpack Compose)
 
-Aplicativo Android de lista de tarefas (To-Do List), desenvolvido em Kotlin com Jetpack Compose. O objetivo da aplicação é permitir que o usuário cadastre, visualize, edite,
-marque como concluída e exclua tarefas, com os dados persistidos localmente no dispositivo através do Room.
+## Descrição do Projeto
 
-A aplicação segue uma arquitetura em camadas (UI → ViewModel → Repository → DAO/Banco de dados),
-separando responsabilidades e permitindo que a interface reaja automaticamente às mudanças de estado,
-sem necessidade de recarregar a tela manualmente.
+Aplicativo Android de lista de tarefas (To-Do List) que permite ao usuário **cadastrar**, **visualizar**, **editar**, **concluir** e **excluir** tarefas, com os dados persistidos localmente no dispositivo através do Room.
 
-🛠️ Tecnologias utilizadas
-Kotlin — linguagem principal do projeto.
-Jetpack Compose — construção de interface declarativa (telas de lista e formulário).
-Room — persistência local dos dados em banco SQLite, com acesso via DAO.
-Coroutines / Flow — operações assíncronas (inserir, atualizar, deletar) e observação reativa da lista de tarefas (Flow → StateFlow).
-ViewModel — retenção de estado e ponte entre a UI e o repositório, sobrevivendo a mudanças de configuração (ex.: rotação de tela).
-Navigation Compose — navegação entre as telas de Lista e Formulário dentro de um único NavHost.
-🏗️ Arquitetura
+A aplicação segue uma arquitetura em camadas (UI → ViewModel → Repository → DAO/Banco de dados), separando responsabilidades e permitindo que a interface reaja automaticamente às mudanças de estado, sem necessidade de recarregar a tela manualmente.
+
+## Tecnologias Utilizadas
+
+- **Kotlin** — linguagem principal do projeto.
+- **Jetpack Compose** — construção de interface declarativa (telas de Lista e Formulário).
+- **Room** — persistência local dos dados em banco SQLite, com acesso via DAO.
+- **Coroutines / Flow** — operações assíncronas e observação reativa da lista de tarefas (`Flow` → `StateFlow`).
+- **ViewModel** — retenção de estado, sobrevivendo a mudanças de configuração (ex.: rotação de tela).
+- **Navigation Compose** — navegação entre as telas de Lista e Formulário em um único `NavHost`.
+
+## Arquitetura
+
+```
 MainActivity
-     │
-     ▼
+     |
+     v
 AppNavigation (NavHost)
-     │
-     ├── ListaTarefasScreen  ──┐
-     │                         │ observam
-     └── FormularioTarefaScreen┘
-                    │
-                    ▼
-            TarefaViewModel
-                    │
-                    ▼
-            TarefaRepository
-                    │
-                    ▼
-         TarefaDao ── TarefaDatabase (Room)
-         
-TarefaRepository:    
+     |
+     |-- ListaTarefasScreen
+     |-- FormularioTarefaScreen
+     |
+     v
+TarefaViewModel
+     |
+     v
+TarefaRepository
+     |
+     v
+TarefaDao -- TarefaDatabase (Room)
+```
 
-É a camada responsável por intermediar o acesso aos dados, isolando o restante do app de detalhes de implementação do Room. Ele expõe:
+## Componentes e Responsabilidades
 
-tarefas: Flow<List<Tarefa>> — o fluxo reativo vindo diretamente do TarefaDao.listarTodas(), repassado sem alterações.
-inserir(tarefa), atualizar(tarefa) e deletar(tarefa) — funções suspend que apenas delegam a chamada ao DAO.
+### TarefaRepository
 
-Sua responsabilidade é puramente de abstração da fonte de dados: se no futuro a origem dos dados mudasse (por exemplo, para uma API remota), apenas o Repository precisaria ser alterado — nem o ViewModel nem a UI seriam impactados.
+Camada responsável por intermediar o acesso aos dados, isolando o restante do app de detalhes de implementação do Room.
 
-TarefaViewModel:
+- `tarefas: Flow<List<Tarefa>>` — fluxo reativo vindo diretamente de `TarefaDao.listarTodas()`.
+- `inserir()`, `atualizar()`, `deletar()` — funções `suspend` que delegam a chamada ao DAO.
 
-É a camada que guarda e gerencia o estado da UI, seguindo o padrão MVVM. Principais responsabilidades:
+**Responsabilidade única:** abstrair a fonte de dados. Se a origem mudasse (ex.: API remota), apenas o Repository precisaria ser alterado — ViewModel e UI não seriam impactados.
 
-Converte o Flow<List<Tarefa>> do repositório em um StateFlow<List<Tarefa>> através de stateIn, usando SharingStarted.WhileSubscribed(5_000) — ou seja, o fluxo continua ativo por 5 segundos após a UI parar de observar, evitando reprocessamento desnecessário em pequenas mudanças de tela (como rotação).
-Expõe as ações inserir, atualizar e deletar, cada uma disparando uma coroutine no viewModelScope (o que garante que a chamada seja cancelada automaticamente se o ViewModel for destruído).
-Fornece uma factory (companion object) que monta manualmente o TarefaRepository a partir do TarefaDao, já que o projeto não utiliza um framework de injeção de dependência (como Hilt) — a criação é feita manualmente via ViewModelProvider.Factory.
+### TarefaViewModel
 
-Em resumo: o ViewModel não sabe como os dados são obtidos, apenas consome o Repository e disponibiliza estado e ações para a UI.
+Camada que guarda e gerencia o estado da UI, seguindo o padrão MVVM.
 
-Como ListaTarefasScreen observa o estado e dispara ações
-A tela coleta o estado com viewModel.tarefas.collectAsStateWithLifecycle(), o que garante que a lista de tarefas (List<Tarefa>) seja recomposta automaticamente sempre que o StateFlow do ViewModel emitir uma nova lista — e que a coleta respeite o ciclo de vida da tela (pausando quando ela não está visível).
-A lista é renderizada em uma LazyColumn, exibindo cada tarefa em um TarefaItem (Card com Checkbox, título, descrição e botão de excluir).
-Ações do usuário disparam eventos que não alteram estado diretamente na tela — eles chamam funções do ViewModel:
-Marcar/desmarcar o Checkbox → viewModel.atualizar(tarefa.copy(concluida = ...)).
-Clicar no ícone de lixeira → viewModel.deletar(tarefa).
-Clicar no Card (ou no botão de "+") → não altera dados, apenas navega (onEditarTarefa / onNovaTarefa), repassados pela AppNavigation.
-A tela em si é "burra": todo o conteúdo visual está isolado em ListaTarefasContent, um Composable que recebe apenas dados e callbacks (facilita reuso em @Preview sem depender do ViewModel).
-Como FormularioTarefaScreen diferencia cadastro e edição
-A tela recebe um tarefaId: Int vindo da navegação.
-Se tarefaId == 0, é tratado como nova tarefa (isEdicao = false), e o formulário abre vazio.
-Se tarefaId != 0, a tela busca a tarefa correspondente na lista observada do ViewModel (tarefas.find { it.id == tarefaId }) e usa seus dados (titulo, descricao) para pré-preencher os campos — configurando isEdicao = true.
-Ao salvar (onSalvar), a mesma lógica de ID decide a ação:
-tarefaId == 0 → viewModel.inserir(Tarefa(...)) (cria uma nova tarefa).
-tarefaId != 0 → viewModel.atualizar(tarefaExistente.copy(...)) (atualiza a tarefa existente, preservando o id e os demais campos).
-Após salvar, a navegação retorna automaticamente para a lista (onVoltar()).
-O título da TopAppBar também muda dinamicamente ("Nova Tarefa" ou "Editar Tarefa") conforme isEdicao.
-Rotas configuradas em AppNavigation e passagem do ID da tarefa
+- Converte o `Flow` do repositório em `StateFlow` via `stateIn`, usando `SharingStarted.WhileSubscribed(5_000)` — o fluxo permanece ativo por 5 segundos após a UI parar de observar, evitando reprocessamento em pequenas mudanças de tela.
+- Expõe as ações `inserir`, `atualizar` e `deletar`, cada uma disparando uma coroutine em `viewModelScope` (cancelada automaticamente se o ViewModel for destruído).
+- Fornece uma `factory` (companion object) que monta manualmente o `TarefaRepository` a partir do `TarefaDao` — não há framework de injeção de dependência (como Hilt); a criação é manual via `ViewModelProvider.Factory`.
 
-O NavHost define duas rotas, com "lista" como tela inicial:
+O ViewModel não sabe como os dados são obtidos — apenas consome o Repository e disponibiliza estado e ações para a UI.
 
-Rota	Tela	Observação
-"lista"	ListaTarefasScreen	Tela inicial (startDestination)
-"formulario/{tarefaId}"	FormularioTarefaScreen	Recebe o ID da tarefa como argumento de rota
-Para nova tarefa, a navegação chama navController.navigate("formulario/0"), ou seja, o próprio ID 0 funciona como sinalizador de "criação".
-Para editar, a lista chama navController.navigate("formulario/$id"), passando o ID real da tarefa clicada.
-Dentro da rota do formulário, o argumento é extraído com backStackEntry.arguments?.getString("tarefaId")?.toInt() ?: 0 e repassado como parâmetro tarefaId para a FormularioTarefaScreen.
-O botão de voltar do formulário chama navController.popBackStack(), retornando para a tela anterior (a lista) sem empilhar uma nova instância.
-Como a MainActivity cria a ViewModel e inicia a navegação
-No onCreate, a Activity chama setContent { } para definir a UI em Compose, envolvendo tudo no TodolistTheme.
-A TarefaViewModel é obtida via viewModel(factory = TarefaViewModel.factory(applicationContext)) — usando a factory definida no próprio ViewModel, que monta o TarefaDatabase, extrai o TarefaDao e injeta no TarefaRepository.
-Essa mesma instância de TarefaViewModel é passada para AppNavigation(viewModel = viewModel), garantindo que tanto a tela de lista quanto a de formulário compartilhem o mesmo ViewModel — por isso o formulário consegue acessar a lista de tarefas para localizar a tarefa em edição.
+### ListaTarefasScreen — observação de estado e ações
 
-▶️ Como executar o projeto
-Clone ou baixe o repositório e extraia o .zip, se necessário.
-Abra o Android Studio e selecione Open, apontando para a pasta raiz do projeto (a que contém build.gradle.kts e settings.gradle.kts).
-Aguarde o Gradle Sync finalizar (pode baixar dependências automaticamente na primeira vez).
-Certifique-se de ter um emulador Android configurado (ou um dispositivo físico conectado via USB com depuração habilitada).
-Clique em Run ▶ (ou Shift + F10) para compilar e instalar o app.
-Requisitos mínimos
-Android Studio atualizado.
-JDK 21.
-minSdk 24 / targetSdk 36.
+- Coleta o estado com `collectAsStateWithLifecycle()`, garantindo recomposição automática a cada nova emissão do `StateFlow`, respeitando o ciclo de vida da tela.
+- Renderiza a lista em uma `LazyColumn`, exibindo cada item como um `Card` (Checkbox + título + descrição + botão de excluir).
+- Ações do usuário não alteram estado diretamente na tela — chamam funções do ViewModel:
+  - Marcar/desmarcar `Checkbox` → `viewModel.atualizar(...)`
+  - Ícone de lixeira → `viewModel.deletar(...)`
+  - Clique no Card ou no botão "+" → apenas navega, repassado pela `AppNavigation`
+- Toda a UI está isolada em `ListaTarefasContent`, um Composable "burro" que recebe apenas dados e callbacks — facilita reuso em `@Preview` sem depender do ViewModel.
 
-🖼️ Evidências
+### FormularioTarefaScreen — cadastro vs. edição
+
+| Condição | Comportamento |
+|---|---|
+| `tarefaId == 0` | Nova tarefa — formulário abre vazio (`isEdicao = false`) |
+| `tarefaId != 0` | Edição — busca a tarefa na lista observada e pré-preenche os campos (`isEdicao = true`) |
+
+- Ao salvar (`onSalvar`), a mesma lógica de ID decide a ação: `viewModel.inserir(...)` ou `viewModel.atualizar(...)`, preservando o `id` original em edições.
+- Após salvar, a navegação retorna automaticamente para a lista.
+- O título da `TopAppBar` muda dinamicamente: "Nova Tarefa" ou "Editar Tarefa".
+
+### AppNavigation — rotas e passagem de ID
+
+| Rota | Tela | Observação |
+|---|---|---|
+| `lista` | `ListaTarefasScreen` | Tela inicial (`startDestination`) |
+| `formulario/{tarefaId}` | `FormularioTarefaScreen` | Recebe o ID da tarefa como argumento de rota |
+
+- Nova tarefa → `navController.navigate("formulario/0")` — o ID `0` sinaliza "criação".
+- Editar → `navController.navigate("formulario/$id")` — passa o ID real da tarefa.
+- O argumento é extraído com `backStackEntry.arguments?.getString("tarefaId")?.toInt() ?: 0`.
+- O botão de voltar chama `navController.popBackStack()`, retornando sem empilhar uma nova instância.
+
+### MainActivity — criação da ViewModel e início da navegação
+
+1. No `onCreate`, chama `setContent { }`, envolvendo a UI no `TodolistTheme`.
+2. Obtém a `TarefaViewModel` via `viewModel(factory = TarefaViewModel.factory(applicationContext))`, que monta o `TarefaDatabase`, extrai o `TarefaDao` e injeta no `TarefaRepository`.
+3. Passa essa mesma instância para `AppNavigation(viewModel = viewModel)` — garantindo que Lista e Formulário compartilhem o mesmo ViewModel (por isso o formulário consegue localizar a tarefa em edição).
+
+## Como Executar o Projeto
+
+1. Clone ou baixe o repositório (extraia o `.zip`, se necessário).
+2. Abra o Android Studio, clique em **Open** e selecione a pasta raiz do projeto (a que contém `build.gradle.kts` e `settings.gradle.kts`).
+3. Aguarde o Gradle Sync finalizar (as dependências são baixadas automaticamente na primeira vez).
+4. Configure um emulador Android ou conecte um dispositivo físico com depuração USB habilitada.
+5. Clique em **Run** (ou `Shift + F10`) para compilar e instalar o app.
+
+### Requisitos mínimos
+
+- Android Studio atualizado
+- JDK 21
+- `minSdk` 24 / `targetSdk` 36
+
+## Evidências
 •	Tela inicial com a lista de tarefas em execução.
 •	Cadastro de uma nova tarefa.
 •	Tarefa cadastrada aparecendo na lista.
@@ -106,17 +119,14 @@ minSdk 24 / targetSdk 36.
 •	Exclusão de uma tarefa.
 •	Navegação entre a lista e o formulário.
 •	Build ou execução do projeto sem erros.
-<img width="498" height="389" alt="Screenshot 2026-05-11 150727" src="https://github.com/user-attachments/assets/a6af168c-229f-4df1-9048-4f415aa9131c" />
-<img width="1105" height="472" alt="Screenshot 2026-05-11 164021" src="https://github.com/user-attachments/assets/71691c85-15b4-4343-b00f-60df46daa0b8" />
-<img width="575" height="40" alt="Screenshot 2026-05-12 151236" src="https://github.com/user-attachments/assets/4db12da3-495c-45fb-a45b-3fecab3c82ca" />
-<img width="1494" height="48" alt="Screenshot 2026-05-19 184027" src="https://github.com/user-attachments/assets/b5d9d04e-d548-41e6-98f1-12dc5071815e" />
-<img width="613" height="555" alt="Screenshot 2026-05-25 153221" src="https://github.com/user-attachments/assets/42174b91-deae-460a-b494-5e863191046e" />
-<img width="318" height="692" alt="Screenshot 2026-08-26 093319" src="https://github.com/user-attachments/assets/54c5315a-a79a-4ea4-bb5a-797f09f6c204" />
-<img width="318" height="694" alt="Screenshot 2026-08-26 093337" src="https://github.com/user-attachments/assets/70bcc658-b170-45a1-89c6-11dfbc44dfa7" />
-<img width="315" height="693" alt="Screenshot 2026-08-26 093407" src="https://github.com/user-attachments/assets/23623bf5-c682-42d2-abed-5454cb170a63" />
-<img width="308" height="694" alt="Screenshot 2026-08-26 093420" src="https://github.com/user-attachments/assets/33feb053-f17b-43b4-a4dd-4837809ce004" />
-<img width="323" height="688" alt="Screenshot 2026-08-26 093437" src="https://github.com/user-attachments/assets/8ca78cc3-812d-48fd-b0a0-dde4b4ba47f0" />
-<img width="311" height="690" alt="Screenshot 2026-08-26 093450" src="https://github.com/user-attachments/assets/25627266-dea3-4b28-8026-b16306e61d44" />
-<img width="313" height="689" alt="Screenshot 2026-08-26 093716" src="https://github.com/user-attachments/assets/67cfd44f-3914-47a2-a6ef-55c0174d4aa3" />
-<img width="442" height="139" alt="Screenshot 2026-08-26 093736" src="https://github.com/user-attachments/assets/1346e1d7-cff8-43ed-bed9-888c4a90de35" />
+
+<img width="318" height="692" alt="Screenshot 2026-08-26 093319" src="https://github.com/user-attachments/assets/e5f6ee23-8b69-41c1-974b-e673795506ec" />
+<img width="318" height="694" alt="Screenshot 2026-08-26 093337" src="https://github.com/user-attachments/assets/1234a9f2-dbe1-4a25-83b6-dbd2ce2b47a4" />
+<img width="315" height="693" alt="Screenshot 2026-08-26 093407" src="https://github.com/user-attachments/assets/d70502d9-6966-4802-b523-e3ed7098367e" />
+<img width="308" height="694" alt="Screenshot 2026-08-26 093420" src="https://github.com/user-attachments/assets/641b7259-a4b6-4a3d-92e2-50c6fe0d803d" />
+<img width="323" height="688" alt="Screenshot 2026-08-26 093437" src="https://github.com/user-attachments/assets/8a51e1fe-2aac-4793-9388-7898c73fbbf1" />
+<img width="311" height="690" alt="Screenshot 2026-08-26 093450" src="https://github.com/user-attachments/assets/d604998f-e997-4a95-943c-144fe3c07d6a" />
+<img width="313" height="689" alt="Screenshot 2026-08-26 093716" src="https://github.com/user-attachments/assets/81251705-50bb-4b56-aace-38586194efe1" />
+<img width="442" height="139" alt="Screenshot 2026-08-26 093736" src="https://github.com/user-attachments/assets/7bb2f561-e5bf-4180-ba21-6caeb8dafd0f" />
+
 
