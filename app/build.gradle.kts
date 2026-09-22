@@ -5,13 +5,13 @@ plugins {
 }
 
 android {
-    namespace = "Feteixeira.com.github.todolist"
+    namespace = "mortari17.com.github.todolist"
     compileSdk {
         version = release(37)
     }
 
     defaultConfig {
-        applicationId = "Feteixeira.com.github.todolist"
+        applicationId = "mortari17.com.github.todolist"
         minSdk = 24
         targetSdk = 36
         versionCode = 1
