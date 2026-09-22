@@ -29,7 +29,6 @@ class TarefaViewModel(private val repository: TarefaRepository) : ViewModel() {
 
     fun deletar(tarefa: Tarefa) = viewModelScope.launch { repository.deletar(tarefa) }
 
-    // Tarefa aguardando confirmação de exclusão (null = diálogo fechado)
     private val _tarefaParaExcluir = MutableStateFlow<Tarefa?>(null)
     val tarefaParaExcluir: StateFlow<Tarefa?> = _tarefaParaExcluir.asStateFlow()
 
