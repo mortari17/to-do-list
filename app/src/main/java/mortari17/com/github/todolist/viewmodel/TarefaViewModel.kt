@@ -7,8 +7,10 @@ import androidx.lifecycle.viewModelScope
 import mortari17.com.github.todolist.data.Tarefa
 import mortari17.com.github.todolist.data.TarefaDatabase
 import mortari17.com.github.todolist.repository.TarefaRepository
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -26,6 +28,24 @@ class TarefaViewModel(private val repository: TarefaRepository) : ViewModel() {
     fun atualizar(tarefa: Tarefa) = viewModelScope.launch { repository.atualizar(tarefa) }
 
     fun deletar(tarefa: Tarefa) = viewModelScope.launch { repository.deletar(tarefa) }
+
+    // Tarefa aguardando confirmação de exclusão (null = diálogo fechado)
+    private val _tarefaParaExcluir = MutableStateFlow<Tarefa?>(null)
+    val tarefaParaExcluir: StateFlow<Tarefa?> = _tarefaParaExcluir.asStateFlow()
+
+    fun solicitarExclusao(tarefa: Tarefa) {
+        _tarefaParaExcluir.value = tarefa
+    }
+
+    fun cancelarExclusao() {
+        _tarefaParaExcluir.value = null
+    }
+
+    fun confirmarExclusao() {
+        val tarefa = _tarefaParaExcluir.value ?: return
+        _tarefaParaExcluir.value = null
+        deletar(tarefa)
+    }
 
     companion object {
         fun factory(context: Context): ViewModelProvider.Factory =
